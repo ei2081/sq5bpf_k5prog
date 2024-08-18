@@ -34,7 +34,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/select.h>
@@ -48,23 +47,25 @@
 #include <getopt.h>
 #include <ctype.h>
 #include <stdint.h>
+
 #include "uvk5.h"
 
 #define VERSION "Quansheng UV-K5 EEPROM programmer v0.9 (c) 2023 Jacek Lipkowski <sq5bpf@lipkowski.org>"
 
-#define MODE_NONE 0
-#define MODE_READ 1
-#define MODE_WRITE 2
-#define MODE_WRITE_MOST 3
-#define MODE_WRITE_ALL 4
-#define MODE_FLASH_DEBUG 5
-#define MODE_FLASH 6
+#define MODE_NONE         0
+#define MODE_READ         1
+#define MODE_WRITE        2
+#define MODE_WRITE_MOST   3
+#define MODE_WRITE_ALL    4
+#define MODE_FLASH_DEBUG  5
+#define MODE_FLASH        6
 
 
-#define UVK5_EEPROM_SIZE 0x2000
+#define UVK5_EEPROM_SIZE                     0x2000
 #define UVK5_EEPROM_SIZE_WITHOUT_CALIBRATION 0x1d00
-#define UVK5_EEPROM_BLOCKSIZE 0x80
-#define UVK5_PREPARE_TRIES 10
+#define UVK5_EEPROM_BLOCKSIZE                0x80
+
+#define UVK5_PREPARE_TRIES                   10
 
 /* actually the flash is bigger, but there is a bootloader at 0xf000 that we don't want to overwrite 
  * if you're really brave, then you can modify the code by changing UVK5_MAX_FLASH_SIZE to 0x10000
@@ -72,30 +73,30 @@
  *
  * maybe at some point i will make a command line flag for this
  */
-#define UVK5_MAX_FLASH_SIZE 0xf000 
-#define UVK5_FLASH_BLOCKSIZE 0x100
+#define UVK5_MAX_FLASH_SIZE   0xf000 
+#define UVK5_FLASH_BLOCKSIZE  0x100
 
 #define DEFAULT_SERIAL_PORT "/dev/ttyUSB0"
-#define DEFAULT_FILE_NAME "k5_eeprom.raw"
-#define DEFAULT_FLASH_NAME "k5_flash.raw"
+#define DEFAULT_FILE_NAME   "k5_eeprom.raw"
+#define DEFAULT_FLASH_NAME  "k5_flash.raw"
 
 /* the vendor flasher sends the firmware version like "2.01.23" */
 #define DEFAULT_FLASH_VERSION "*.01.23"
 
 /* globals */
-speed_t ser_speed=B38400;
-char *ser_port=DEFAULT_SERIAL_PORT;
-int verbose=0;
-int mode=MODE_NONE;
-char *file=DEFAULT_FILE_NAME;
-char *flash_file=DEFAULT_FLASH_NAME;
+speed_t ser_speed = B38400;
+char *ser_port    = DEFAULT_SERIAL_PORT;
+int verbose       = 0;
+int mode          = MODE_NONE;
+char *file        = DEFAULT_FILE_NAME;
+char *flash_file  = DEFAULT_FLASH_NAME;
 
-char flash_version_string[8]=DEFAULT_FLASH_VERSION;
+char flash_version_string[8] = DEFAULT_FLASH_VERSION;
 
-int write_offset=0;
-int write_length=-1;
+int write_offset  = 0;
+int write_length  = -1;
 
-int i_know_what_im_doing=0; /* flag the user sets to confirm that he thinks he knows what he's doing */
+int i_know_what_im_doing = 0; /* flag the user sets to confirm that he thinks he knows what he's doing */
 
 struct k5_command {
 	unsigned char *cmd;
@@ -106,7 +107,7 @@ struct k5_command {
 };
 
 /**** commands ********/
-unsigned char uvk5_hello2[]={0x14, 0x05, 0x04, 0x00, 0x9f, 0x25, 0x5a, 0x64}; 
+unsigned char uvk5_hello2[] = {0x14, 0x05, 0x04, 0x00, 0x9f, 0x25, 0x5a, 0x64}; 
 
 /* commands:
  * 0x14 - hello
