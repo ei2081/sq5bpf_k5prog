@@ -49,6 +49,7 @@
 #include <stdint.h>
 
 #include "uvk5.h"
+#include "osxdebug.h"
 
 #define VERSION "Quansheng UV-K5 EEPROM programmer v0.9 (c) 2023 Jacek Lipkowski <sq5bpf@lipkowski.org>"
 
@@ -176,37 +177,65 @@ int openport(char *port,speed_t speed)
 	int fd;
 	struct termios my_termios;
 
+	DBG_PRN_NTR("openport.open");
 	fd = open(port, O_RDWR | O_NOCTTY);
+	DBG_PRN_XIT("openport.open");
 
 	if (fd < 0)
 	{
 		printf("open error %d %s\n", errno, strerror(errno));
 		return(-1);
 	}
+	DBG_PRN_MSG("openport: fd !< 0");
 
+	DBG_PRN_NTR("openport.tcgetattr");
 	if (tcgetattr(fd, &my_termios))
 	{
 		printf("tcgetattr error %d %s\n", errno, strerror(errno));
 		return(-1);
 	}
 
+	// DBG_PRINT("Got these attributes. ") // TODO - inspecting this structure
+	DBG_PRN_XIT("openport.tcgetattr");
+
+	if(-1) {
+		DBG_PRN_MSG("-1 is truey");
+	}
+
+	DBG_PRN_NTR("openport.tcflush");
 	if (tcflush(fd, TCIFLUSH))
 	{
 		printf("tcgetattr error %d %s\n", errno, strerror(errno));
 		return(-1);
 	}
+	DBG_PRN_XIT("openport.tcflush");
 
-
+	DBG_PRN_MSG("flag setting for my_termios");
 	my_termios.c_cflag =  CS8 |CREAD | CLOCAL | HUPCL;
+	// variants don't appear to matter
+	// my_termios.c_cflag =  CS8 |CREAD | CLOCAL ;
+	// my_termios.c_cflag =  CS8 |CREAD  | HUPCL;
+	// my_termios.c_cflag =  CS8 | CLOCAL | HUPCL;
+	// my_termios.c_cflag =  CREAD | CLOCAL | HUPCL;
+
+	DBG_PRN_NTR("openport.cfmakeraw");
 	cfmakeraw(&my_termios);
+	DBG_PRN_XIT("openport.cfmakeraw");
+
+	DBG_PRN_NTR("openport.cfsetospeed");
 	cfsetospeed(&my_termios, speed);
-	if (	tcsetattr(fd, TCSANOW, &my_termios))
+	DBG_PRN_XIT("openport.cfsetospeed");
+
+
+	DBG_PRN_NTR("openport.tcsetattr");
+	if (tcsetattr(fd, TCSANOW, &my_termios))
 	{
 		printf("tcsetattr error %d %s\n", errno, strerror(errno));
 		return(-1);
 	}
+	DBG_PRN_XIT("openport.tcsetattr");
 
-
+	DBG_PRN_MSG("openport: returning...");
 	return(fd);
 
 }
@@ -927,14 +956,31 @@ int write_file(char *name, unsigned char *buffer, int len)
 	close(fd);
 	return(1);
 }
+
 int k5_prepare(int fd) {
 	int r;
 	struct k5_command *cmd;
 
+	DBG_PRN_NTR("k5_prepare.k5_send_buf - hello");
 	r=k5_send_buf(fd,uvk5_hello,sizeof(uvk5_hello));
-	if (!r) return(0);
+	DBG_PRN_XIT("k5_prepare.k5_send_buf");
+
+	if (!r) {
+		DBG_PRN_MSG("k5_send_buf wasn't trueish");
+		return(0);
+	}
+	DBG_PRN_MSG("k5_send_buf was trueish");
+
+
+	DBG_PRN_NTR("k5_prepare.k5_receive 10s timeout");
 	cmd=k5_receive(fd,10000);
-	if (!cmd) return(0);
+	DBG_PRN_XIT("k5_prepare.k5_receive");
+
+	if (!cmd) {
+		DBG_PRN_MSG("k5_receive was'nt trueish");		// ISSUES OCCUR HERE - BAUD RELATED ?
+		return(0);
+	}
+	DBG_PRN_MSG("k5_receive was trueish");
 
 	/* this is a bit problem with people trying to read the radio config in firmware flash mode,
 	 * don't know why people do this, but they do it quite often */
@@ -945,7 +991,10 @@ int k5_prepare(int fd) {
 	}
 	printf ("cmd: %2.2x %2.2x ok:%i\n",cmd->cmd[0],cmd->cmd[1],cmd->crcok);
 	printf("******  Connected to firmware version: [%s]\n",(cmd->cmd)+4);
+	
+	DBG_PRN_NTR("k5_prepare.destroy_k5_struct");
 	destroy_k5_struct(cmd);
+	DBG_PRN_XIT("k5_prepare.destroy_k5_struct");
 
 	return(1);
 }
@@ -971,7 +1020,9 @@ int main(int argc,char **argv)
 	}
 
 
+	DBG_PRN_NTR("openport");
 	fd=openport(ser_port,ser_speed);
+	DBG_PRN_XIT("openport");
 
 	if (fd<0) {
 		fprintf(stderr,"Open %s failed\n",ser_port);
@@ -989,6 +1040,9 @@ int main(int argc,char **argv)
 	{
 
 		case MODE_FLASH_DEBUG:
+
+			DBG_PRN_MSG("flash debug mode");
+
 			if (i_know_what_im_doing<1) {
 				printf("ERROR: the \"I know what i'm doing\" value has to be at least 1 to confirm that you know what you're doing\n");
 				exit(0);
@@ -998,6 +1052,9 @@ int main(int argc,char **argv)
 			break;
 
 		case MODE_FLASH:
+		
+			DBG_PRN_MSG("flash mode");
+
 			if (i_know_what_im_doing<3) {
 				printf("ERROR: the \"I know what i'm doing\" value has to be at least 3, to confirm that you really know what you're doing\n");
 				exit(0);
@@ -1065,8 +1122,10 @@ int main(int argc,char **argv)
 
 	for (i=0;i<UVK5_PREPARE_TRIES;i++)
 	{
+		DBG_PRN_NTR("prepare");
 		if (verbose>0) { printf("k5_prepare: try %i\n",i); }
 		r=k5_prepare(fd);
+		DBG_PRN_XIT("prepare");
 		if (r) break;
 	}
 
@@ -1081,6 +1140,8 @@ int main(int argc,char **argv)
 
 
 		case MODE_READ:
+		
+			DBG_PRN_MSG("read mode");
 
 			for(i=0;i<UVK5_EEPROM_SIZE; i=i+UVK5_EEPROM_BLOCKSIZE) {
 				if (!k5_readmem(fd,(unsigned char *)&eeprom[i],UVK5_EEPROM_BLOCKSIZE,i))
@@ -1104,6 +1165,9 @@ int main(int argc,char **argv)
 		case MODE_WRITE:
 		case MODE_WRITE_MOST:
 		case MODE_WRITE_ALL:
+		
+			DBG_PRN_MSG("writey mode");
+
 			if ((mode==MODE_WRITE_ALL)&&(i_know_what_im_doing<1)) {
 				printf("ERROR: the \"I know what I'm doing\" value has to be at least 1 to confirm that you know what you're doing\n");
 				exit(0);
@@ -1166,6 +1230,8 @@ int main(int argc,char **argv)
 
 			break;
 		default:
+		
+			DBG_PRN_MSG("default(woops) mode");
 			fprintf(stderr,"this shouldn't happen :)\n");
 			break;
 	}
